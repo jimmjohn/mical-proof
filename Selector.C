@@ -34,7 +34,8 @@
 #include <TParameter.h>
 #include "StraightLineFit.h"
 #include <algorithm>
-
+#include "TMath.h"
+#include "TH2F.h"
 
 void Selector::Begin(TTree * /*tree*/)
 {
@@ -118,8 +119,31 @@ void Selector::SlaveBegin(TTree  *tree)
      ylayer_reso[ij] = new TH1F(title, title, 150, -xposmx, xposmx);
      sprintf(title, "totalentry_l%i", ij);
      totalentry[ij]=new TH2D(title, title, nstrip, -0.5, nstrip-0.5, nstrip, -0.5, nstrip-0.5);
-
+     //Timing
+     sprintf(title,"xtime_layer_1hit_%i",ij);
+     xtime_layer_1hit[ij] = new TH1F(title,title,8000,-0.5,799.5);
+     sprintf(title,"ytime_layer_1hit_%i",ij);
+     ytime_layer_1hit[ij] = new TH1F(title,title,8000,-0.5,799.5);
+     sprintf(title,"xtime_layer_hough_%i",ij);
+     xtime_layer_hough[ij] = new TH1F(title,title,8000,-0.5,799.5);
+     sprintf(title,"ytime_layer_hough_%i",ij);
+     ytime_layer_hough[ij] = new TH1F(title,title,8000,-0.5,799.5);
+     sprintf(title,"xtime_layer_%i",ij);
+     xtime_layer[ij] = new TH1F(title,title,8000,-0.5,799.5);
+     sprintf(title,"ytime_layer_%i",ij);
+     ytime_layer[ij] = new TH1F(title,title,8000,-0.5,799.5);
+     sprintf(title,"distance_from_pos_l%i",ij);
+     distance_from_pos_l[ij] = new TH1F(title,title,100,-0.5,199.5);
+     sprintf(title,"distance_from_ext_l%i",ij);
+     distance_from_ext_l[ij] = new TH1F(title,title,200,-0.5,199.5);
    }
+
+   sprintf(title,"distance_from_pos");
+   distance_from_pos = new TH1F(title,title,200,-0.5,199.5);
+   sprintf(title,"distance_from_ext");
+   distance_from_ext = new TH1F(title,title,200,-0.5,199.5);
+
+
 
    //create histograms
    h1 = new TH1F("h1","h1",1000,10000,240000);
@@ -151,8 +175,11 @@ Bool_t Selector::Process(Long64_t entry)
    //Reading from Main root file.
 
 
-   //Position Analysis
-   //-----------------
+   //////////////////////////////////////////////
+   //                                          //
+   //           Position Analysis              //
+   //                                          //
+   //////////////////////////////////////////////
 
    //X-side
    int    xhits[nlayer],xfitfailed,xndof;
@@ -169,8 +196,8 @@ Bool_t Selector::Process(Long64_t entry)
    //Additional variables
    vector<int> xpts[nlayer];
    vector<int> ypts[nlayer];
-   vector<int> xptsall[nlayer]; //For trigger criteria
-   vector<int> yptsall[nlayer];
+   vector<double> xptsall[nlayer]; //For trigger criteria
+   vector<double> yptsall[nlayer];
    vector<int> xptsalltdc[nlayer][nTDCpLayer]; //signal for each TDC
    vector<int> yptsalltdc[nlayer][nTDCpLayer];
 
@@ -217,9 +244,25 @@ Bool_t Selector::Process(Long64_t entry)
        xpos[jk]= -100;
      } else {
        for (int ix=0; ix<xhits[jk]; ix++) {
-         // Only first cluster will be used.... Need to modify to big cluster
-         if (ix<xhits[jk]-1 && abs(xpts[jk][ix]-xpts[jk][ix+1])>1) { xpos[jk]=-100; break;}
-         xpos[jk] +=xpts[jk][ix];
+         // Only layers with one hit or one cluster is used
+         if (ix<xhits[jk]-1 && abs(xpts[jk][ix]-xpts[jk][ix+1])>1)
+         {xpos[jk]=-100; break;}
+         xpos[jk] += xpts[jk][ix];
+       }
+       int tempx=0;
+       int mul=1;
+       for(int ix=0; ix<xhits[jk]; ix++) {
+         //Find clusters and save to xptsall[jk]
+         if(mul==1){tempx += xpts[jk][ix];}
+         if(ix<xhits[jk]-1 &&  abs(xpts[jk][ix]-xpts[jk][ix+1])==1)
+         {tempx += xpts[jk][ix+1]; mul++;}
+         else {
+           double val = (double)tempx/(double)mul + 0.5 - xoff[jk];
+           val -= cal_slope2(val, &align_xstr_xdev[jk][0]);
+           xptsall[jk].push_back(val);
+           mul=1;
+           tempx=0;
+         }
        }
      }
      xxerr[jk] = errxco[jk]*errxco[jk];
@@ -234,9 +277,25 @@ Bool_t Selector::Process(Long64_t entry)
        ypos[jk]= -100;
      } else {
        for (int ix=0; ix<yhits[jk]; ix++) {
-         //Only first cluster will be used.... Need to modify to big cluster
-         if (ix<yhits[jk]-1 && abs(ypts[jk][ix]-ypts[jk][ix+1])>1) { ypos[jk]=-100; break;}
-         ypos[jk] +=ypts[jk][ix];
+         //Only layers with one hit or one cluster is used.
+         if (ix<yhits[jk]-1 && abs(ypts[jk][ix]-ypts[jk][ix+1])>1)
+         {ypos[jk]=-100; break;}
+         ypos[jk] += ypts[jk][ix];
+       }
+       int tempy=0;
+       int mul=1;
+       for(int ix=0; ix<yhits[jk]; ix++) {
+         //Find clusters and save to yptsall[jk]
+         if(mul==1){tempy += ypts[jk][ix];}
+         if(ix<yhits[jk]-1 &&  abs(ypts[jk][ix]-ypts[jk][ix+1])==1)
+         {tempy += ypts[jk][ix+1]; mul++;}
+         else {
+           double val = (double)tempy/(double)mul + 0.5 - yoff[jk];
+           val -= cal_slope2(val, &align_ystr_ydev[jk][0]);
+           yptsall[jk].push_back(val);
+           mul=1;
+           tempy=0;
+         }
        }
      }
      yyerr[jk] = errxco[jk]*errxco[jk];
@@ -257,6 +316,7 @@ Bool_t Selector::Process(Long64_t entry)
    double tempxpos[nlayer], tempypos[nlayer];
    copy(begin(xpos), end(xpos), begin(tempxpos));
    copy(begin(ypos), end(ypos), begin(tempypos));
+
 
    for(int occulyr=0;occulyr<=nlayer;occulyr++)
    {
@@ -284,9 +344,38 @@ Bool_t Selector::Process(Long64_t entry)
    StraightLineFit yposfit(1, zval, ypos,  yyerr, yusedpos, occulyr, occulyr, layfirst, laylast, xyPosDev);
    yposfit.GetParameters(yfitfailed, yintersect, yslope);
    yposfit.GetFitValues(yext, ydev, yexter);
+
    for (int ix=0; ix<nlayer; ix++) {
        xpos[ix] -=cal_slope2(yext[ix], &align_ystr_xdev[ix][0]);
        ypos[ix] -=cal_slope2(xext[ix], &align_xstr_ydev[ix][0]);
+   }
+
+   if(occulyr<nlayer)
+   {
+     if(xfitfailed==0)
+     {
+       double minx=10000.0;
+       for(unsigned int ix=0; ix<xptsall[occulyr].size(); ix++)
+       {
+         if(abs(xext[occulyr]-xptsall[occulyr][ix])<minx)
+         {
+           tempxpos[occulyr] = xptsall[occulyr][ix];
+           minx = abs(xext[occulyr]-xptsall[occulyr][ix]);
+         }
+       }
+     }
+     if(yfitfailed==0)
+     {
+       double miny=10000.0;
+       for(unsigned int ix=0; ix<yptsall[occulyr].size(); ix++)
+       {
+         if(abs(yext[occulyr]-yptsall[occulyr][ix])<miny)
+         {
+           tempypos[occulyr] = yptsall[occulyr][ix];
+           miny = abs(yext[occulyr]-yptsall[occulyr][ix]);
+         }
+       }
+     }
    }
 
    //X-Side fit
@@ -331,17 +420,382 @@ Bool_t Selector::Process(Long64_t entry)
    }//occulyr loop end
 
 
-   //Timing analysis
-   //---------------
+   //////////////////////////////////////////////
+   //                                          //
+   //           Timing Analysis                //
+   //                                          //
+   //////////////////////////////////////////////
 
    //X-time
    int    xtfitfailed,xtndof;
+   double xtime[nlayer];
    double xtintersect,xtslope,xterrinter,xterrslope,xterrcovar,xtchisquare;
    double xtext[nlayer],xtdev[nlayer],xtexter[nlayer];
    //Y-time
    int    ytfitfailed,ytndof;
+   double ytime[nlayer];
    double ytintersect,ytslope,yterrinter,yterrslope,yterrcovar,ytchisquare;
    double ytext[nlayer],ytdev[nlayer],ytexter[nlayer];
+
+   //removing noise hits using hough transform______________________________
+   #ifdef hough_space
+   // double rmin,rmax,thetamin,thetamax;
+   // int nbinr,nbintheta;
+   // rmin=-10000.;
+   // rmax=10000.;
+   // thetamin=0.;
+   // thetamax=180.;
+   // nbinr=1000;
+   // nbintheta=1000;
+   //
+   // TH2F hough_space_x("hough_space_x","rx vs thetax",nbinr,rmin,rmax,nbintheta,thetamin,thetamax);
+   // TH2F hough_space_y("hough_space_y","ry vs thetay",nbinr,rmin,rmax,nbintheta,thetamin,thetamax);
+   #endif
+
+   for(int jk=0;jk<nlayer;jk++)
+   {
+     for (int itdc=0; itdc<nTDCpLayer; itdc++)
+     {
+       double tmpxtime = -10000;
+       if(vxtdc_l[jk][itdc]->size())
+       {
+         tmpxtime=600.+ 0.1*int(vxtdc_l[jk][itdc]->at(0)-tdc_ref_l[jk]);
+         xtime_layer_1hit[jk]->Fill(tmpxtime);
+       }
+       double tmpytime = -10000;
+       if(vytdc_l[jk][itdc]->size())
+       {
+         tmpytime=600.+ 0.1*int(vytdc_l[jk][itdc]->at(0)-tdc_ref_l[jk]);
+         ytime_layer_1hit[jk]->Fill(tmpytime);
+
+       }
+       #ifdef hough_space
+       // for(unsigned int multitdc=0;multitdc<vxtdc_l[jk][itdc]->size();multitdc++)
+       // {
+       //   double z = (double)jk;
+       //   double xt = 600.+ 0.1*(double)(vxtdc_l[jk][itdc]->at(multitdc)-tdc_ref_l[jk]);
+       //   for(double theta=thetamin;theta<=thetamax;theta=theta+180./1000.)
+       //   {
+       //     double r=xt*cos(TMath::DegToRad()*theta)+z*sin(TMath::DegToRad()*theta);
+       //     hough_space_x.Fill(r,theta);
+       //   }
+       // }
+       //
+       // for(unsigned int multitdc=0;multitdc<vytdc_l[jk][itdc]->size();multitdc++)
+       // {
+       //   double z = (double)jk;
+       //   double yt = 600.+ 0.1*(double)(vytdc_l[jk][itdc]->at(multitdc)-tdc_ref_l[jk]);
+       //   for(double theta=thetamin;theta<=thetamax;theta=theta+180./1000.)
+       //   {
+       //     double r=yt*cos(TMath::DegToRad()*theta)+z*sin(TMath::DegToRad()*theta);
+       //     hough_space_y.Fill(r,theta);
+       //   }
+       // }
+       #endif
+     }//nTDCpLayer
+   }//nlayer
+
+   #ifdef hough_space
+   // Int_t rlocx,thetalocx,zlocx;
+   // hough_space_x.GetBinXYZ(hough_space_x.GetMaximumBin(), rlocx, thetalocx, zlocx);
+   // double rvalx=rmin+(rmax-rmin)*((double)rlocx-0.5)/nbinr;
+   // double thetavalx=thetamin+(thetamax-thetamin)*((double)thetalocx-0.5)/nbintheta;
+   // Int_t rlocy,thetalocy,zlocy;
+   // hough_space_y.GetBinXYZ(hough_space_y.GetMaximumBin(), rlocy, thetalocy, zlocy);
+   // double rvaly=rmin+(rmax-rmin)*((double)rlocy-0.5)/nbinr;
+   // double thetavaly=thetamin+(thetamax-thetamin)*((double)thetalocy-0.5)/nbintheta;
+   #endif
+
+
+   double tmpxtime[nlayer];
+   double tmpytime[nlayer];
+   for(int jk=0;jk<nlayer;jk++)
+   {
+     tmpxtime[jk]=-10000.0;
+     tmpytime[jk]=-10000.0;
+     double z=jk;
+     double xt=xtime_layer_1hit[jk]->GetMean();
+     double yt=xtime_layer_1hit[jk]->GetMean();
+     #ifdef hough_space
+     //double xt=(rvalx-(z*sin(TMath::DegToRad()*thetavalx)))/cos(TMath::DegToRad()*thetavalx);
+     //double yt=(rvaly-(z*sin(TMath::DegToRad()*thetavaly)))/cos(TMath::DegToRad()*thetavaly);
+     #endif
+     int minx=100000;
+     int miny=100000;
+     for (int itdc=0; itdc<nTDCpLayer; itdc++)
+     {
+       for(unsigned int multitdc=0;multitdc<vxtdc_l[jk][itdc]->size();multitdc++)
+       {
+         if(abs(xt - (600. + 0.1*int(vxtdc_l[jk][itdc]->at(multitdc) - tdc_ref_l[jk])))<minx)
+         {
+           minx=abs(xt - (600. + 0.1*int(vxtdc_l[jk][itdc]->at(multitdc) - tdc_ref_l[jk])));
+           tmpxtime[jk]=600. + 0.1*int(vxtdc_l[jk][itdc]->at(multitdc) - tdc_ref_l[jk]);
+         }
+       }
+       for(unsigned int multitdc=0;multitdc<vytdc_l[jk][itdc]->size();multitdc++)
+       {
+         if(abs(yt - (600. + 0.1*int(vytdc_l[jk][itdc]->at(multitdc) -tdc_ref_l[jk])))<miny)
+         {
+           miny=abs(yt - (600. + 0.1*int(vytdc_l[jk][itdc]->at(multitdc) -tdc_ref_l[jk])));
+           tmpytime[jk]=600. + 0.1*int(vytdc_l[jk][itdc]->at(multitdc) -tdc_ref_l[jk]);
+         }
+       }
+
+     }
+     xtime_layer_hough[jk]->Fill(tmpxtime[jk]);
+     ytime_layer_hough[jk]->Fill(tmpytime[jk]);
+   }
+
+   //Timing Corrections start
+
+   double initxpos, initypos, initzpos;
+   double dist[nlayer];
+   initxpos = -100.0;
+   initypos = -100.0;
+   initzpos = 0;
+   int init = -1;
+   int istr;
+   int istrxtime[nlayer], istrytime[nlayer]; //strip with early timing
+
+   for(int jk=0; jk<nlayer; jk++)
+   {
+     istrxtime[jk] = -1;
+     istrytime[jk] = -1;
+     xtime[jk] = -10000.0;
+     ytime[jk] = -10000.0;
+     if (init<0) {
+ 		  initxpos = xextloc[jk];
+ 		  initypos = yextloc[jk];
+ 		  dist[jk] = 0.0;
+ 		  init = jk;
+ 		  initzpos = layerzpos[jk];
+ 		  } else {
+        //Distance form bottom layer(along the partical trajectory)
+ 		     dist[jk] = sqrt( pow((xextloc[jk] - initxpos)*stripwidth, 2.) +
+ 				   pow((yextloc[jk] - initypos)*stripwidth, 2.) +
+ 				   pow(layerzpos[jk] - initzpos, 2.));
+ 		  }
+      if(abs(xdev[jk]) < 2.0 && abs(ydev[jk]) < 2.0 &&
+       xpts[jk].size()>0 && xpts[jk].size() <=nmxhits && ypts[jk].size()>0 && ypts[jk].size() <=nmxhits)
+       {//if condition for timing correction starts here
+        int channelnum[nstrip];
+        double inittime = 11000;
+        double tshft=0;
+        //X-Side
+        //Find the strip with the first time
+        for (int ix=0; ix<min(nstrip,int(xpts[jk].size())); ix++)
+        {
+          channelnum[ix] = xpts[jk][ix]%8;
+          if (vxtdc_l[jk][channelnum[ix]]->size()) {
+            double tmpoxtime = 600.0 + 0.1*(int(vxtdc_l[jk][channelnum[ix]]->at(0)-tdc_ref_l[jk]));
+            if (tmpoxtime < inittime) {
+    			    inittime = tmpoxtime; tshft =xtoffset[jk][xpts[jk][ix]]; istr = istrxtime[jk] = xpts[jk][ix];
+    			  }
+          }
+        }
+        //Save the time to xtime
+        if(inittime <10000){xtime[jk] = inittime;}
+        //Apply corrections
+        xtime[jk] -= timeoffsetx[jk];
+        xtime[jk] -= slope_path*yext[jk];
+        xtime[jk] -= tshft;
+
+        istr = int(yextloc[jk]+0.5);
+        if (istr<0) istr=0;
+        if (istr>=nstrip) istr = nstrip-1;
+        double dx = yextloc[jk]-istr;
+
+        // Linear extrapolation using only two points
+  		  if ((istr==0 && dx<=0.0) || (istr==nstrip-1 && dx>=0.0)) {
+   		    xtime[jk] -=xt_slope_cor[jk][istrxtime[jk]][istr];
+   		  } else if (dx>0) {
+   		    xtime[jk] -=(1-dx)*xt_slope_cor[jk][istrxtime[jk]][istr]+dx*xt_slope_cor[jk][istrxtime[jk]][istr+1];
+   		  } else {
+   		    xtime[jk] -=abs(dx)*xt_slope_cor[jk][istrxtime[jk]][istr-1]+(1-abs(dx))*xt_slope_cor[jk][istrxtime[jk]][istr];
+   		  }
+
+        inittime = 11000;
+        tshft=0;
+        //Y-Side
+        //Find the strip with the first time
+        for (int ix=0; ix<min(nstrip,int(ypts[jk].size())); ix++)
+        {
+          channelnum[ix] = ypts[jk][ix]%8;
+          if (vytdc_l[jk][channelnum[ix]]->size()) {
+            double tmpoytime = 600.0 + 0.1*(int(vytdc_l[jk][channelnum[ix]]->at(0)-tdc_ref_l[jk]));
+            if (tmpoytime < inittime) {
+    			    inittime = tmpoytime; tshft =ytoffset[jk][ypts[jk][ix]]; istr = istrytime[jk] = ypts[jk][ix];
+    			  }
+          }
+        }
+        //Save the time to xtime
+        if(inittime <10000){ytime[jk] = inittime;}
+        //Apply corrections
+        ytime[jk] -= timeoffsety[jk];
+        ytime[jk] -= ytimeshift; // shift y-time to match with x-time
+        ytime[jk] -= slope_path*xext[jk];
+        ytime[jk] -= tshft;
+
+        istr = int(xextloc[jk]+0.5);
+        if (istr<0) istr=0;
+        if (istr>=nstrip) istr = nstrip-1;
+        dx = xextloc[jk]-istr;
+
+        // Linear extrapolation using only two points
+  		  if ((istr==0 && dx<=0.0) || (istr==nstrip-1 && dx>=0.0)) {
+   		    ytime[jk] -=yt_slope_cor[jk][istrytime[jk]][istr];
+   		  } else if (dx>0) {
+   		    ytime[jk] -=(1-dx)*yt_slope_cor[jk][istrytime[jk]][istr]+dx*yt_slope_cor[jk][istrytime[jk]][istr+1];
+   		  } else {
+   		    ytime[jk] -=abs(dx)*yt_slope_cor[jk][istrytime[jk]][istr-1]+(1-abs(dx))*yt_slope_cor[jk][istrytime[jk]][istr];
+   		  }
+   //Timing Corrections end
+
+        xtime_layer[jk]->Fill(xtime[jk]);
+        ytime_layer[jk]->Fill(ytime[jk]);
+
+      }  //if condition for timing correction ends here
+    }//nlayer for loop
+
+
+   //////////////////////////////////////////////
+   //                                          //
+   //          Dead Space Analysis             //
+   //                                          //
+   //////////////////////////////////////////////
+
+   //Trigger layers - 6,7,8,9
+   //We are intrested layers 3,4,5(where muon stopped).
+   //means 4,5,6 are the layers we look for efficency after a hit
+   //Bottom layers are excluded for our study because of chance coincidence that
+   //bottom layers may be inefficient
+
+   bool mustopped;
+   for(int laystudy=4;laystudy<=6;laystudy++)
+   {
+     //The layer under study should have hit, if not check above layers
+     //Reasons for layer under study dont have a hit are inefficiency or
+     //the muon is stopped in the above layer
+     if(!xusedpos[laystudy])
+     {continue;}
+     //Three layers just below the layer under study should have the expected location
+     if(xext[laystudy-1]>59 || xext[laystudy-1]<4 || yext[laystudy-1]>59 ||yext[laystudy-1]<4
+      ||xext[laystudy-2]>59 || xext[laystudy-2]<4 || yext[laystudy-2]>59 ||yext[laystudy-2]<4
+      ||xext[laystudy-3]>59 || xext[laystudy-3]<4 || yext[laystudy-3]>59 ||yext[laystudy-3]<4)
+     {
+       break;
+     }
+     mustopped=true;
+     //bottom layers should not have a latch hit within two strip width of the expected location
+     for(int botlay=laystudy-1;botlay>=0;botlay--)
+     {
+       if(abs(xpos[botlay]-xext[botlay]) <= 2)
+       {mustopped=false;break;}
+     }
+     if(mustopped==false)
+     {break;}
+     //Now we are sure that the muon stopped. But electron can go isotropically
+     //So we dont know the laystudy layer hit is due to a muon or electron
+     //To confirm it is due to a muon, we impose the time should be within 10 ns
+     //and position to be within one stripwidth.
+
+     //if(xtime[laystudy])                  ---incorporate later
+     double muhitx=-100;
+     double muhity=-100;
+     double elhitx=-100;
+     double elhity=-100;
+
+     if((xptsall[laystudy].size()==2  && yptsall[laystudy].size()==2) ||
+        (xptsall[laystudy].size()==2  && yptsall[laystudy].size()==1) ||
+        (xptsall[laystudy].size()==1  && yptsall[laystudy].size()==2))
+     {
+        if(xptsall[laystudy].size()==2)
+        {
+          muhitx=min(xptsall[laystudy][0],xptsall[laystudy][1]);
+          elhitx=max(xptsall[laystudy][0],xptsall[laystudy][1]);
+        }
+        else if(xptsall[laystudy].size()==1)
+        {
+          muhitx=elhitx=xptsall[laystudy][0];
+        }
+        if(yptsall[laystudy].size()==2)
+        {
+          muhity=min(yptsall[laystudy][0],yptsall[laystudy][1]);
+          elhity=max(yptsall[laystudy][0],yptsall[laystudy][1]);
+        }
+        else if(yptsall[laystudy].size()==1)
+        {
+          muhity=elhity=yptsall[laystudy][0];
+        }
+        double distancepos = sqrt(pow((muhitx - elhitx)*stripwidth, 2.) +
+          pow((muhity - elhity)*stripwidth, 2.));
+        double distanceext = sqrt(pow((xext[laystudy] - elhitx)*stripwidth, 2.) +
+          pow((yext[laystudy] - elhity)*stripwidth, 2.));
+
+        distance_from_pos->Fill(distancepos);
+        distance_from_ext->Fill(distanceext);
+
+     }
+   }
+
+   for(int jk=0; jk<nlayer; jk++)
+   {
+     //if(xtime[laystudy])                  ---incorporate later
+     double muhitx=-100;
+     double muhity=-100;
+     double elhitx=-100;
+     double elhity=-100;
+
+     if((xptsall[jk].size()==2  && yptsall[jk].size()==2) ||
+        (xptsall[jk].size()==2  && yptsall[jk].size()==1) ||
+        (xptsall[jk].size()==1  && yptsall[jk].size()==2))
+     {
+        if(xptsall[jk].size()==2)
+        {
+          muhitx=min(xptsall[jk][0],xptsall[jk][1]);
+          elhitx=max(xptsall[jk][0],xptsall[jk][1]);
+        }
+        else if(xptsall[jk].size()==1)
+        {
+          muhitx=elhitx=xptsall[jk][0];
+        }
+        if(yptsall[jk].size()==2)
+        {
+          muhity=min(yptsall[jk][0],yptsall[jk][1]);
+          elhity=max(yptsall[jk][0],yptsall[jk][1]);
+        }
+        else if(yptsall[jk].size()==1)
+        {
+          muhity=elhity=yptsall[jk][0];
+        }
+        double distancepos = sqrt(pow((muhitx - elhitx)*stripwidth, 2.) +
+          pow((muhity - elhity)*stripwidth, 2.));
+        double distanceext = sqrt(pow((xext[jk] - elhitx)*stripwidth, 2.) +
+          pow((yext[jk] - elhity)*stripwidth, 2.));
+
+        distance_from_pos_l[jk]->Fill(distancepos);
+        distance_from_ext_l[jk]->Fill(distanceext);
+
+     }
+   }
+
+
+
+
+   //////////////////////////////////////////////
+   //                                          //
+   //          Dead Time Analysis              //
+   //                                          //
+   //////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
 
 
 
@@ -387,7 +841,24 @@ void Selector::SlaveTerminate()
      for(unsigned int ij=0;ij<nlayer;ij++){
        totalentry[ij]->Write(0, TObject::kOverwrite);
      }
-
+     for(unsigned int ij=0;ij<nlayer;ij++){
+       xtime_layer_1hit[ij]->Write(0, TObject::kOverwrite);
+       ytime_layer_1hit[ij]->Write(0, TObject::kOverwrite);
+     }
+     for(unsigned int ij=0;ij<nlayer;ij++){
+       xtime_layer_hough[ij]->Write(0, TObject::kOverwrite);
+       ytime_layer_hough[ij]->Write(0, TObject::kOverwrite);
+     }
+     for(unsigned int ij=0;ij<nlayer;ij++){
+       xtime_layer[ij]->Write(0, TObject::kOverwrite);
+       ytime_layer[ij]->Write(0, TObject::kOverwrite);
+     }
+     distance_from_pos->Write(0, TObject::kOverwrite);
+     distance_from_ext->Write(0, TObject::kOverwrite);
+     for(unsigned int ij=0;ij<nlayer;ij++){
+       distance_from_pos_l[ij]->Write(0, TObject::kOverwrite);
+       distance_from_ext_l[ij]->Write(0, TObject::kOverwrite);
+     }
      fProofFile->Print();
      fOutput->Add(fProofFile);
 
@@ -453,6 +924,7 @@ Double_t Selector::cal_slope2(Double_t x, Double_t* par) {
   }
 }
 
+//After second fitting if we called GetPosInStrip two times alignment correction will be done. Is this correct?
 void Selector::GetPosInStrip(int ixy, double* ext, double* otherext, double* off, double* pos, double* local) {
   for (int ij=0; ij<nlayer; ij++) {
     local[ij] = ext[ij]; //+off[ij];
