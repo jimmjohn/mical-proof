@@ -95,6 +95,18 @@ public :
    TH1F* ylayer_reso[nlayer];
    TH2D* totalentry[nlayer];
 
+   TH1F* xtime_layer_1hit[nlayer];
+   TH1F* ytime_layer_1hit[nlayer];
+   TH1F* xtime_layer_hough[nlayer];
+   TH1F* ytime_layer_hough[nlayer];
+   TH1F* xtime_layer[nlayer];
+   TH1F* ytime_layer[nlayer];
+
+   TH1F* distance_from_pos;
+   TH1F* distance_from_ext;
+
+   TH1F* distance_from_pos_l[nlayer];
+   TH1F* distance_from_ext_l[nlayer];
 
    TH1F *h1;//!
 
