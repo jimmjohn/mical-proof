@@ -44,7 +44,7 @@ using namespace std;
 //              Int_t nwrks = -1, TList *ins = 0)
 void analysis()
 {
-  const char *what = "simple(nevt=1000000)";
+  const char *what = "simple";
   const char *masterurl = "lite://";
   Int_t nwrks = 6;
   TList *ins = 0;

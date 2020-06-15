@@ -133,9 +133,13 @@ void Selector::SlaveBegin(TTree  *tree)
      sprintf(title,"ytime_layer_%i",ij);
      ytime_layer[ij] = new TH1F(title,title,8000,-0.5,799.5);
      sprintf(title,"distance_from_pos_l%i",ij);
-     distance_from_pos_l[ij] = new TH1F(title,title,100,-0.5,199.5);
+     distance_from_pos_l[ij] = new TH1F(title,title,200,-0.5,199.5);
      sprintf(title,"distance_from_ext_l%i",ij);
      distance_from_ext_l[ij] = new TH1F(title,title,200,-0.5,199.5);
+     sprintf(title,"tdc_mul_twohit_x_l%i",ij);
+     tdc_mul_twohit_x[ij] = new TH1F(title,title,40,-0.5,39.5);
+     sprintf(title,"tdc_mul_twohit_y_l%i",ij);
+     tdc_mul_twohit_y[ij] = new TH1F(title,title,40,-0.5,39.5);
    }
 
    sprintf(title,"distance_from_pos");
@@ -143,7 +147,10 @@ void Selector::SlaveBegin(TTree  *tree)
    sprintf(title,"distance_from_ext");
    distance_from_ext = new TH1F(title,title,200,-0.5,199.5);
 
-
+   sprintf(title,"tdc_mul_mustopped_x");
+   tdc_mul_mustopped[0] = new TH1F(title,title,40,-0.5,39.5);
+   sprintf(title,"tdc_mul_mustopped_y");
+   tdc_mul_mustopped[1] = new TH1F(title,title,40,-0.5,39.5);
 
    //create histograms
    h1 = new TH1F("h1","h1",1000,10000,240000);
@@ -705,29 +712,23 @@ Bool_t Selector::Process(Long64_t entry)
      double elhitx=-100;
      double elhity=-100;
 
-     if((xptsall[laystudy].size()==2  && yptsall[laystudy].size()==2) ||
-        (xptsall[laystudy].size()==2  && yptsall[laystudy].size()==1) ||
-        (xptsall[laystudy].size()==1  && yptsall[laystudy].size()==2))
+     if(xptsall[laystudy].size()==2  && yptsall[laystudy].size()==2)
      {
-        if(xptsall[laystudy].size()==2)
-        {
-          muhitx=min(xptsall[laystudy][0],xptsall[laystudy][1]);
-          elhitx=max(xptsall[laystudy][0],xptsall[laystudy][1]);
-        }
-        else if(xptsall[laystudy].size()==1)
-        {
-          muhitx=elhitx=xptsall[laystudy][0];
-        }
-        if(yptsall[laystudy].size()==2)
-        {
-          muhity=min(yptsall[laystudy][0],yptsall[laystudy][1]);
-          elhity=max(yptsall[laystudy][0],yptsall[laystudy][1]);
-        }
-        else if(yptsall[laystudy].size()==1)
-        {
-          muhity=elhity=yptsall[laystudy][0];
-        }
-        double distancepos = sqrt(pow((muhitx - elhitx)*stripwidth, 2.) +
+        if(abs(xext[laystudy]-xptsall[laystudy][0])<abs(xext[laystudy]-xptsall[laystudy][1])) {
+          muhitx=xptsall[laystudy][0];
+          elhitx=xptsall[laystudy][1]; }
+        else {
+          muhitx=xptsall[laystudy][1];
+          elhitx=xptsall[laystudy][0]; }
+
+        if(abs(yext[laystudy]-yptsall[laystudy][0])<abs(yext[laystudy]-yptsall[laystudy][1])) {
+            muhity=yptsall[laystudy][0];
+            elhity=yptsall[laystudy][1]; }
+          else {
+            muhity=yptsall[laystudy][1];
+            elhity=yptsall[laystudy][0]; }
+
+      double distancepos = sqrt(pow((muhitx - elhitx)*stripwidth, 2.) +
           pow((muhity - elhity)*stripwidth, 2.));
         double distanceext = sqrt(pow((xext[laystudy] - elhitx)*stripwidth, 2.) +
           pow((yext[laystudy] - elhity)*stripwidth, 2.));
@@ -736,38 +737,49 @@ Bool_t Selector::Process(Long64_t entry)
         distance_from_ext->Fill(distanceext);
 
      }
+
+     int mul=0;
+     for (int itdc=0; itdc<nTDCpLayer; itdc++)
+     {
+       mul += vxtdc_l[laystudy][itdc]->size();
+     }
+     tdc_mul_mustopped[0]->Fill(mul);
+
+     mul=0;
+     for (int itdc=0; itdc<nTDCpLayer; itdc++)
+     {
+       mul += vytdc_l[laystudy][itdc]->size();
+     }
+     tdc_mul_mustopped[1]->Fill(mul);
    }
 
    for(int jk=0; jk<nlayer; jk++)
    {
+     if(xfitfailed==1 || yfitfailed==1)
+     {
+       break;
+     }
      //if(xtime[laystudy])                  ---incorporate later
      double muhitx=-100;
      double muhity=-100;
      double elhitx=-100;
      double elhity=-100;
 
-     if((xptsall[jk].size()==2  && yptsall[jk].size()==2) ||
-        (xptsall[jk].size()==2  && yptsall[jk].size()==1) ||
-        (xptsall[jk].size()==1  && yptsall[jk].size()==2))
+     if(xptsall[jk].size()==2  && yptsall[jk].size()==2)
      {
-        if(xptsall[jk].size()==2)
-        {
-          muhitx=min(xptsall[jk][0],xptsall[jk][1]);
-          elhitx=max(xptsall[jk][0],xptsall[jk][1]);
-        }
-        else if(xptsall[jk].size()==1)
-        {
-          muhitx=elhitx=xptsall[jk][0];
-        }
-        if(yptsall[jk].size()==2)
-        {
-          muhity=min(yptsall[jk][0],yptsall[jk][1]);
-          elhity=max(yptsall[jk][0],yptsall[jk][1]);
-        }
-        else if(yptsall[jk].size()==1)
-        {
-          muhity=elhity=yptsall[jk][0];
-        }
+       if(abs(xext[jk]-xptsall[jk][0])<abs(xext[jk]-xptsall[jk][1])) {
+         muhitx=xptsall[jk][0];
+         elhitx=xptsall[jk][1]; }
+       else {
+         muhitx=xptsall[jk][1];
+         elhitx=xptsall[jk][0]; }
+       if(abs(yext[jk]-yptsall[jk][0])<abs(yext[jk]-yptsall[jk][1])) {
+           muhity=yptsall[jk][0];
+           elhity=yptsall[jk][1]; }
+         else {
+           muhity=yptsall[jk][1];
+           elhity=yptsall[jk][0]; }
+
         double distancepos = sqrt(pow((muhitx - elhitx)*stripwidth, 2.) +
           pow((muhity - elhity)*stripwidth, 2.));
         double distanceext = sqrt(pow((xext[jk] - elhitx)*stripwidth, 2.) +
@@ -775,6 +787,20 @@ Bool_t Selector::Process(Long64_t entry)
 
         distance_from_pos_l[jk]->Fill(distancepos);
         distance_from_ext_l[jk]->Fill(distanceext);
+
+        int mul=0;
+        for (int itdc=0; itdc<nTDCpLayer; itdc++)
+        {
+          mul += vxtdc_l[jk][itdc]->size();
+        }
+        tdc_mul_twohit_x[jk]->Fill(mul);
+
+        mul=0;
+        for (int itdc=0; itdc<nTDCpLayer; itdc++)
+        {
+          mul += vytdc_l[jk][itdc]->size();
+        }
+        tdc_mul_twohit_y[jk]->Fill(mul);
 
      }
    }
@@ -859,6 +885,13 @@ void Selector::SlaveTerminate()
        distance_from_pos_l[ij]->Write(0, TObject::kOverwrite);
        distance_from_ext_l[ij]->Write(0, TObject::kOverwrite);
      }
+     tdc_mul_mustopped[0]->Write(0, TObject::kOverwrite);
+     tdc_mul_mustopped[1]->Write(0, TObject::kOverwrite);
+     for(unsigned int ij=0;ij<nlayer;ij++){
+       tdc_mul_twohit_x[ij]->Write(0, TObject::kOverwrite);
+       tdc_mul_twohit_y[ij]->Write(0, TObject::kOverwrite);
+     }
+
      fProofFile->Print();
      fOutput->Add(fProofFile);
 

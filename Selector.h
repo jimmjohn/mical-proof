@@ -105,6 +105,10 @@ public :
    TH1F* distance_from_pos;
    TH1F* distance_from_ext;
 
+   TH1F* tdc_mul_mustopped[2];
+   TH1F* tdc_mul_twohit_x[nlayer];
+   TH1F* tdc_mul_twohit_y[nlayer];
+
    TH1F* distance_from_pos_l[nlayer];
    TH1F* distance_from_ext_l[nlayer];
 
